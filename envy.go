@@ -1,11 +1,14 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
+	"runtime/trace"
 	"sort"
 	"strings"
 	"sync"
@@ -68,21 +71,82 @@ func ReversePaths(a []string) []string {
 	return a
 }
 
-func SetEnv(key, value string) {
-	// TODO: escape value
-	fmt.Printf("export %s='%s'\n", key, value)
+// ValidEnvVar checks if an environment variable name is valid.
+// https://stackoverflow.com/questions/2821043/
+var ValidEnvVar = regexp.MustCompile(`[a-zA-Z_]+[a-zA-Z0-9_]*`)
+
+// ShellQuote quotes a value with single quotes in a way that is safe to pass
+// to the shell. Since there is no way to escape ' inside single quotes, we
+// exit the single quotes and quote that char with double quotes, like "'".
+// The string "who's there?" will become 'Who'"'"'s there?'
+func ShellQuote(s string) string {
+	return "'" + strings.Replace(s, "'", `'"'"'`, -1) + "'"
 }
 
-func undoOld(cwd string, ses *session.Session) {
+// SetEnv prints a shell env var export command. The key is expected to be
+// safe, the value is escaped.
+func SetEnv(key, value string) {
+	if !ValidEnvVar.MatchString(key) {
+		// Should have been checked by caller
+		log.Fatalf("SetEnv got an invalid env var name: %v", key)
+	}
+	fmt.Printf("export %s=%s\n", key, ShellQuote(value))
 }
+
+// HomeDir returns the current user's cleaned home dir path (no trailing '/').
+func HomeDir() (string, error) {
+	// First try HOME env var (saves ~2 ms over user API and makes testing easier)
+	home := os.Getenv("HOME")
+	if home != "" {
+		return filepath.Clean(home), nil
+	}
+
+	// Fallback to user API
+	u, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	if u.HomeDir == "" {
+		return "", fmt.Errorf("home dir empty")
+	}
+	return filepath.Clean(u.HomeDir), nil
+}
+
+// ShortenPath shortens paths by replacing the home dir with '~' and current
+// dir with '.' for display.
+func ShortenPath(p, cwd, home string) string {
+	if session.IsSubpath(p, cwd) {
+		return "." + p[len(cwd):]
+	}
+	if session.IsSubpath(p, home) {
+		return "~" + p[len(home):]
+	}
+	return p
+}
+
+var traceFile = flag.String("trace", "", "Write trace to given file for use with `go tool trace`")
 
 func main() {
+	// TODO: use https://github.com/fatih/color
 	log.SetPrefix("\033[1;34m[envy]\033[0m ")
 	log.SetFlags(0)
 
-	u, err := user.Current()
-	if err != nil || u.HomeDir == "" {
-		log.Fatalf("Could not determine home dir.")
+	flag.Parse()
+
+	if *traceFile != "" {
+		f, err := os.Create(*traceFile)
+		if err != nil {
+			log.Fatalf("Cannot write trace to %s: %v", *traceFile, err)
+		}
+		defer log.Printf("To view the trace file, run:  go tool trace %s", *traceFile)
+		defer f.Close()
+		trace.Start(f)
+		defer trace.Stop()
+	}
+
+	home, err := HomeDir()
+	if err != nil {
+		log.Fatalf("Could not determine home dir: %v", nil)
 	}
 
 	cwd, err := os.Getwd()
@@ -94,7 +158,6 @@ func main() {
 
 	ses := session.Load(os.Getenv("_envy_session"))
 	ses.Path = cwd
-	undoOld(cwd, ses)
 
 	path := ReversePaths(filepath.SplitList(os.Getenv("PATH")))
 	pathChanged := false
@@ -103,23 +166,19 @@ func main() {
 	undoneEnv := make(map[string]string)
 	// TODO: Work from deep to shallow
 	for _, u := range undo {
-		if u.Path != nil {
-			for p := range u.Path {
-				path, _ = RemoveFromPath(path, p)
-				log.Printf("undo: PATH -= %s", p)
-				pathChanged = true
-			}
+		for p := range u.Path {
+			path, _ = RemoveFromPath(path, p)
+			log.Printf("restore: PATH -= %s", ShortenPath(p, cwd, home))
+			pathChanged = true
 		}
-		if u.Env != nil {
-			for k, v := range u.Env {
-				SetEnv(k, v)
-				undoneEnv[k] = v
-				log.Printf("undo: %s = %s", k, v)
-			}
+		for k, v := range u.Env {
+			SetEnv(k, v)
+			undoneEnv[k] = v
+			log.Printf("restore: %s = %s", k, ShortenPath(v, cwd, home))
 		}
 	}
 
-	paths := PathsToCheck(cwd, u.HomeDir)
+	paths := PathsToCheck(cwd, home)
 	//log.Printf("Checking: %v", paths)
 
 	ac := make(chan action.Action)
@@ -160,7 +219,7 @@ func main() {
 			if changed {
 				u := ses.UndoFor(a.Path)
 				u.Path[a.AddPath] = true
-				log.Printf("PATH += %s", a.AddPath)
+				log.Printf("PATH += %s", ShortenPath(a.AddPath, cwd, home))
 			}
 		}
 
@@ -182,7 +241,7 @@ func main() {
 				if _, exists := u.Env[k]; !exists {
 					u.Env[k] = savedValue
 				}
-				log.Printf("%s = %s", k, v)
+				log.Printf("%s = %s", k, ShortenPath(v, cwd, home))
 			}
 		}
 	}
@@ -191,6 +250,8 @@ func main() {
 		pathenv := strings.Join(ReversePaths(path), string(filepath.ListSeparator))
 		SetEnv("PATH", pathenv)
 	}
+
+	// TODO: If variables previously changed do not appear in this list, unset them
 
 	// We need to export this one too, so that if the user start a subshell,
 	// envy is aware of the changes in the parent shell.
