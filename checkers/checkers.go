@@ -15,7 +15,7 @@ var AllCheckers = []Checker{
 }
 
 type Checker interface {
-	Check(path string) []action.Action
+	Check(path string) action.List
 }
 
 func IsDir(path string) bool {
@@ -30,7 +30,7 @@ type BinCheck struct {
 	RelPath string
 }
 
-func (c BinCheck) Check(path string) (actions []action.Action) {
+func (c BinCheck) Check(path string) (actions action.List) {
 	bin := filepath.Join(path, c.RelPath)
 	if !IsDir(bin) {
 		return
@@ -45,7 +45,7 @@ func (c BinCheck) Check(path string) (actions []action.Action) {
 
 type GoPathCheck struct{}
 
-func (c GoPathCheck) Check(path string) (actions []action.Action) {
+func (c GoPathCheck) Check(path string) (actions action.List) {
 	bin := filepath.Join(path, "bin")
 	if !IsDir(bin) {
 		return

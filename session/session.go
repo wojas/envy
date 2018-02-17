@@ -3,8 +3,8 @@ package session
 import (
 	"encoding/json"
 	"log"
-	"path/filepath"
-	"strings"
+
+	"github.com/wojas/envy/paths"
 )
 
 // PathUndo describes the actions to undo for a single path
@@ -42,7 +42,7 @@ func (s *Session) ToUndoFor(p string) []PathUndo {
 	undo := make([]PathUndo, 0)
 	delPaths := make([]string, 0)
 	for path, u := range s.Undo {
-		if IsSubpath(p, path) {
+		if paths.IsSubpath(p, path) {
 			continue // Still active
 		}
 		delPaths = append(delPaths, path)
@@ -78,15 +78,4 @@ func Load(data string) *Session {
 		log.Printf("WARNING: Cannot unmarshal session")
 	}
 	return s
-}
-
-// IsSubpath checks if path `p` is a subpath of `parent`
-func IsSubpath(p, parent string) bool {
-	if !strings.HasPrefix(p, parent) {
-		return false
-	}
-	if len(p) > len(parent) {
-		return p[len(parent)] == filepath.Separator
-	}
-	return true
 }
