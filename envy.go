@@ -138,9 +138,7 @@ func main() {
 		if a.SetEnv != "" {
 			k, v := a.SetEnv, a.SetEnvValue
 			seenEnvs[k] = true
-			// TODO: Move current env check to the end
-			if os.Getenv(k) != v {
-				savedValue := env.Get(k)
+			if prevValue := env.Get(k); prevValue != v {
 				env.Set(k, v)
 
 				// Only store current env value if we did not already store a
@@ -148,7 +146,7 @@ func main() {
 				// TODO: Do we also need to check higher up paths for the value?
 				u := ses.UndoFor(a.Path)
 				if _, exists := u.Env[k]; !exists {
-					u.Env[k] = savedValue
+					u.Env[k] = prevValue
 				}
 				log.Printf("%s = %s", k, shorten.Do(v))
 			}
@@ -186,6 +184,9 @@ func main() {
 		}
 
 		// For PATH elements
+		// TODO: If a shallower path reappears later, it will be added to the front.
+		//       This is undesirable. Avoiding this would require storing the
+		//       original PATH before we do any changes in a session.
 		for p := range u.Path {
 			if !seenPaths[p] {
 				log.Printf("restore: PATH -= %s", shorten.Do(p))
@@ -201,7 +202,9 @@ func main() {
 
 	// Print commands to perform environment changes
 	for _, item := range env.Changes() {
-		shell.SetEnv(item.Key, item.Val)
+		if os.Getenv(item.Key) != item.Val {
+			shell.SetEnv(item.Key, item.Val)
+		}
 	}
 	if path.Changed {
 		pathenv := strings.Join(path.Get(), string(filepath.ListSeparator))
