@@ -102,9 +102,8 @@ func main() {
 	path := environ.NewPath(filepath.SplitList(os.Getenv("PATH")))
 	env := environ.New()
 
-	// Undo previous changes if the user moved to a different working directory.
+	// Step 1: Undo previous changes if the user moved to a different working directory.
 	undo := ses.ToUndoFor(cwd)
-	// TODO: Work from deep to shallow
 	for _, u := range undo {
 		for p := range u.Path {
 			path.Remove(p)
@@ -116,8 +115,10 @@ func main() {
 		}
 	}
 
-	// Perform actions for the current working directory.
+	// Step 2: Perform actions for the current working directory.
 	actions := getActions(paths.ToCheck(cwd, home))
+	seenEnvs := make(map[string]bool)
+	seenPaths := make(map[string]bool)
 	for _, a := range actions {
 		if debug {
 			log.Printf("action %#v", a)
@@ -125,6 +126,7 @@ func main() {
 
 		if a.AddPath != "" {
 			p := a.AddPath
+			seenPaths[p] = true
 			if !path.Has(p) {
 				path.Add(p)
 				u := ses.UndoFor(a.Path)
@@ -135,6 +137,8 @@ func main() {
 
 		if a.SetEnv != "" {
 			k, v := a.SetEnv, a.SetEnvValue
+			seenEnvs[k] = true
+			// TODO: Move current env check to the end
 			if os.Getenv(k) != v {
 				savedValue := env.Get(k)
 				env.Set(k, v)
@@ -151,6 +155,50 @@ func main() {
 		}
 	}
 
+	// Step 3: Undo changes that no longer appear in the current list of actions
+	// For this we check which env vars occur in the undo state that were not
+	// reported by the checkers and changed in the env.
+	// Note that after Step 1 the session undo data only contains active paths.
+
+	// TODO: this will not be triggered the first time if the var was already
+	//       restored in Step 1, in which case it will also be changed. Maybe
+	//       merge Step 1 into this one, because we do not need to restore
+	//       vars that are changed by checkers anyway? But then we need to be
+	//       careful about which undo value we store in the session.
+
+	// These two are defined outside of the loop to also apply all removes from
+	// shallow paths to deeper ones.
+	// This relies on the undo items being sorted from shallow to deep paths.
+	removeEnvs := make([]string, 0)
+	removePaths := make([]string, 0)
+	for _, u := range ses.PathUndoList() {
+		// For environment variables
+		for k, v := range u.Env {
+			if !seenEnvs[k] {
+				log.Printf("restore: %s = %s", k, shorten.Do(v))
+				env.Set(k, v)
+				removeEnvs = append(removeEnvs, k)
+				seenEnvs[k] = true // Prevent triggering again
+			}
+		}
+		for _, k := range removeEnvs {
+			delete(u.Env, k) // Remove from session, no longer relevant
+		}
+
+		// For PATH elements
+		for p := range u.Path {
+			if !seenPaths[p] {
+				log.Printf("restore: PATH -= %s", shorten.Do(p))
+				path.Remove(p)
+				removePaths = append(removePaths, p)
+				seenPaths[p] = true // Prevent triggering again
+			}
+		}
+		for _, p := range removePaths {
+			delete(u.Path, p)
+		}
+	}
+
 	// Print commands to perform environment changes
 	for _, item := range env.Changes() {
 		shell.SetEnv(item.Key, item.Val)
@@ -159,8 +207,6 @@ func main() {
 		pathenv := strings.Join(path.Get(), string(filepath.ListSeparator))
 		shell.SetEnv("PATH", pathenv)
 	}
-
-	// TODO: If variables previously changed do not appear in this list, unset them
 
 	// Set new session.
 	// This one is exported too, so that if the user start a subshell,

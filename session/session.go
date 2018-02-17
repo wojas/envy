@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"log"
+	"sort"
 
 	"github.com/wojas/envy/paths"
 )
@@ -20,6 +21,9 @@ func NewPathUndo() *PathUndo {
 		Path: make(map[string]bool),
 	}
 }
+
+// PathUndoList is a slice of PathUndo
+type PathUndoList []*PathUndo
 
 // Session describes an envy session
 type Session struct {
@@ -39,18 +43,44 @@ func (s *Session) UndoFor(p string) *PathUndo {
 
 // ToUndoFor returns a list of action to undo for a new working dir, and removes
 // the items from the session.
-func (s *Session) ToUndoFor(p string) []PathUndo {
-	undo := make([]PathUndo, 0)
+func (s *Session) ToUndoFor(p string) PathUndoList {
+	undo := make(PathUndoList, 0)
 	delPaths := make([]string, 0)
-	for path, u := range s.Undo {
+	for path := range s.Undo {
 		if paths.IsSubpath(p, path) {
 			continue // Still active
 		}
 		delPaths = append(delPaths, path)
-		undo = append(undo, *u)
 	}
-	for _, path := range delPaths {
+
+	// We need reverse sorting (from deep to shallow path) for undo. Since
+	// the sort package does not provide it, we use normal ascending sort and
+	// then iterate backwards.
+	sort.Strings(delPaths)
+	for i := len(delPaths) - 1; i >= 0; i-- {
+		path := delPaths[i]
+		undo = append(undo, s.Undo[path])
 		delete(s.Undo, path) // Remove from self
+	}
+	return undo
+}
+
+// PathUndoList returns a list of all the current PathUndo instances, sorted
+// by path
+// ToUndoFor returns a list of action to undo for a new working dir, and removes
+// the items from the session.
+func (s *Session) PathUndoList() PathUndoList {
+	undo := make(PathUndoList, 0)
+	pathList := make([]string, 0, len(s.Undo))
+	for path := range s.Undo {
+		pathList = append(pathList, path)
+	}
+
+	// We need these entries sorted by path from shallow to deep for the
+	// stage where we prune env vars that are no longer set by checkers.
+	sort.Strings(pathList)
+	for _, path := range pathList {
+		undo = append(undo, s.Undo[path])
 	}
 	return undo
 }
