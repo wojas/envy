@@ -14,7 +14,7 @@ import (
 	"sync"
 
 	"github.com/wojas/envy/action"
-	"github.com/wojas/envy/env"
+	"github.com/wojas/envy/checkers"
 	"github.com/wojas/envy/session"
 )
 
@@ -126,6 +126,35 @@ func ShortenPath(p, cwd, home string) string {
 
 var traceFile = flag.String("trace", "", "Write trace to given file for use with `go tool trace`")
 
+// getActions checks all paths for Actions using the checkers.
+func getActions(paths []string) (actions ActionList) {
+	ac := make(chan action.Action)
+	var wg sync.WaitGroup
+
+	for _, p := range paths {
+		for _, c := range checkers.AllCheckers {
+			wg.Add(1)
+			go func(path string, c checkers.Checker) {
+				for _, a := range c.Check(path) {
+					ac <- a
+				}
+				wg.Done()
+			}(p, c)
+		}
+	}
+
+	go func() {
+		wg.Wait()
+		close(ac)
+	}()
+
+	for a := range ac {
+		actions = append(actions, a)
+	}
+	sort.Sort(actions) // shallow paths first
+	return actions
+}
+
 func main() {
 	// TODO: use https://github.com/fatih/color
 	log.SetPrefix("\033[1;34m[envy]\033[0m ")
@@ -179,33 +208,7 @@ func main() {
 	}
 
 	paths := PathsToCheck(cwd, home)
-	//log.Printf("Checking: %v", paths)
-
-	ac := make(chan action.Action)
-	var wg sync.WaitGroup
-
-	for _, p := range paths {
-		e := env.Env{
-			Path:     p,
-			ActionsC: ac,
-			WG:       &wg,
-		}
-		for _, c := range env.AllCheckers {
-			wg.Add(1)
-			go c.Check(e)
-		}
-	}
-
-	go func() {
-		wg.Wait()
-		close(ac)
-	}()
-
-	var actions ActionList
-	for a := range ac {
-		actions = append(actions, a)
-	}
-	sort.Sort(actions) // shallow paths first
+	actions := getActions(paths)
 
 	for _, a := range actions {
 		if debug {
