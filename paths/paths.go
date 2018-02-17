@@ -19,6 +19,9 @@ func IsSubpath(p, parent string) bool {
 	return true
 }
 
+// ToCheck returns all paths to check using the checkers.
+// Currently only paths under the home directory are returned for security,
+// but this will become configurable in a future version.
 func ToCheck(cwd, home string) (paths []string) {
 	// First check if we are within the user's home dir
 	if !IsSubpath(cwd, home) {
@@ -68,4 +71,13 @@ func (s Shorten) Do(p string) string {
 		return "~" + p[len(s.Home):]
 	}
 	return p
+}
+
+// IsDir checks if a path is a directory.
+func IsDir(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return fi.IsDir()
 }

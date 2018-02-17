@@ -27,15 +27,16 @@ func (e *Env) Set(key, val string) {
 	e.changed[key] = val
 }
 
-type Change struct {
-	Key string
-	Val string
-}
-
 // Changes returns all changes to environment variables
 func (e *Env) Changes() (changes []Change) {
 	for k, v := range e.changed {
 		changes = append(changes, Change{k, v})
 	}
 	return
+}
+
+// Change describes a single environment variable change.
+type Change struct {
+	Key string
+	Val string
 }

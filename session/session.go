@@ -13,6 +13,7 @@ type PathUndo struct {
 	Path map[string]bool   // Paths to remove from PATH
 }
 
+// NewPathUndo created a new PathUndo
 func NewPathUndo() *PathUndo {
 	return &PathUndo{
 		Env:  make(map[string]string),
@@ -54,12 +55,14 @@ func (s *Session) ToUndoFor(p string) []PathUndo {
 	return undo
 }
 
+// New creates a Session object.
 func New() *Session {
 	return &Session{
 		Undo: make(map[string]*PathUndo),
 	}
 }
 
+// Dump marshals the session as JSON.
 func Dump(s *Session) string {
 	blob, err := json.Marshal(s)
 	if err != nil {
@@ -68,6 +71,7 @@ func Dump(s *Session) string {
 	return string(blob)
 }
 
+// Load loads a previously marshaled session.
 func Load(data string) *Session {
 	s := New()
 	if data == "" {
