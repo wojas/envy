@@ -81,3 +81,12 @@ func IsDir(path string) bool {
 	}
 	return fi.IsDir()
 }
+
+// IsFile checks if a path is a regular file
+func IsFile(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return fi.Mode().IsRegular()
+}
