@@ -107,11 +107,9 @@ func main() {
 	for _, u := range undo {
 		for p := range u.Path {
 			path.Remove(p)
-			log.Printf("restore: PATH -= %s", shorten.Do(p))
 		}
 		for k, v := range u.Env {
-			env.Set(k, v)
-			log.Printf("restore: %s = %s", k, shorten.Do(v))
+			env.Restore(k, v)
 		}
 	}
 
@@ -131,7 +129,6 @@ func main() {
 				path.Add(p)
 				u := ses.UndoFor(a.Path)
 				u.Path[p] = true
-				log.Printf("PATH += %s", shorten.Do(p))
 			}
 		}
 
@@ -148,7 +145,6 @@ func main() {
 				if _, exists := u.Env[k]; !exists {
 					u.Env[k] = prevValue
 				}
-				log.Printf("%s = %s", k, shorten.Do(v))
 			}
 		}
 	}
@@ -173,8 +169,7 @@ func main() {
 		// For environment variables
 		for k, v := range u.Env {
 			if !seenEnvs[k] {
-				log.Printf("restore: %s = %s", k, shorten.Do(v))
-				env.Set(k, v)
+				env.Restore(k, v)
 				removeEnvs = append(removeEnvs, k)
 				seenEnvs[k] = true // Prevent triggering again
 			}
@@ -189,7 +184,6 @@ func main() {
 		//       original PATH before we do any changes in a session.
 		for p := range u.Path {
 			if !seenPaths[p] {
-				log.Printf("restore: PATH -= %s", shorten.Do(p))
 				path.Remove(p)
 				removePaths = append(removePaths, p)
 				seenPaths[p] = true // Prevent triggering again
@@ -204,11 +198,35 @@ func main() {
 	for _, item := range env.Changes() {
 		if os.Getenv(item.Key) != item.Val {
 			shell.SetEnv(item.Key, item.Val)
+			if item.Restored {
+				log.Printf("restore: %s = %s", item.Key, shorten.Do(item.Val))
+			} else {
+				log.Printf("%s = %s", item.Key, shorten.Do(item.Val))
+			}
 		}
 	}
 	if path.Changed {
 		pathenv := strings.Join(path.Get(), string(filepath.ListSeparator))
 		shell.SetEnv("PATH", pathenv)
+
+		// Print removed paths
+		var removed []string
+		for p := range path.Removed {
+			removed = append(removed, p)
+		}
+		sort.Strings(removed)
+		for _, p := range removed {
+			if !path.Added[p] {
+				log.Printf("restore: PATH -= %s", shorten.Do(p))
+			}
+		}
+
+		// Print added paths
+		for _, p := range path.GetReversed() {
+			if path.Added[p] && !path.Removed[p] {
+				log.Printf("PATH += %s", shorten.Do(p))
+			}
+		}
 	}
 
 	// Set new session.
