@@ -12,7 +12,7 @@ var AllCheckers = []Checker{
 	BinCheck{"bin"},
 	BinCheck{"node_modules/.bin"},
 	BinCheck{".venv/bin"},
-	DotEnvCheck{".env"},
+	DotEnvCheck{".envy"},
 	GoPathCheck{},
 }
 

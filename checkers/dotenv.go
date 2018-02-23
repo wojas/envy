@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/subosito/gotenv" // TODO: find a better one
+	"github.com/wojas/envy/env"
 
 	"github.com/wojas/envy/action"
 	"github.com/wojas/envy/paths"
@@ -42,11 +44,50 @@ func (c DotEnvCheck) Check(path string) (actions action.List) {
 
 	for _, k := range keys {
 		v := dotenv[k]
-		actions = append(actions, action.Action{
-			Path:        path,
-			SetEnv:      k,
-			SetEnvValue: v,
-		})
+		if strings.HasPrefix(k, "ENVY_") {
+			actions = handleEnvyVar(actions, path, k, v)
+		} else {
+			actions = append(actions, action.Action{
+				Path:        path,
+				Priority:    -1,
+				SetEnv:      k,
+				SetEnvValue: v,
+			})
+		}
 	}
 	return
+}
+
+func handleEnvyVar(actions action.List, path, k, v string) action.List {
+	// TODO: make paths absolute
+	switch k {
+	case "ENVY_EXTEND_PATH":
+		for _, p := range env.ReversePaths(filepath.SplitList(v)) {
+			actions = append(actions, action.Action{
+				Path:     path,
+				Priority: -1,
+				AddPath:  p,
+			})
+		}
+	case "ENVY_GOROOT":
+		actions = append(actions, action.Action{
+			Path:     path,
+			Priority: -1,
+			AddPath:  filepath.Join(v, "bin"),
+		}, action.Action{
+			Path:        path,
+			Priority:    -1,
+			SetEnv:      "GOROOT",
+			SetEnvValue: v,
+		})
+	case "ENVY_PYTHONROOT":
+		actions = append(actions, action.Action{
+			Path:     path,
+			Priority: -1,
+			AddPath:  filepath.Join(v, "bin"),
+		})
+	default:
+		log.Printf("%s not supported in env files", k)
+	}
+	return actions
 }

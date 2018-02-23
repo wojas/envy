@@ -9,7 +9,7 @@ type Path struct {
 // NewPath returns a new Path
 func NewPath(paths []string) *Path {
 	return &Path{
-		revPath: reversePath(paths),
+		revPath: ReversePaths(paths),
 	}
 }
 
@@ -43,11 +43,11 @@ func (p *Path) Has(path string) bool {
 
 // Get returns the list of paths.
 func (p *Path) Get() []string {
-	return reversePath(p.revPath)
+	return ReversePaths(p.revPath)
 }
 
-// reversePath reverses a list of paths
-func reversePath(a []string) []string {
+// ReversePaths reverses a list of paths
+func ReversePaths(a []string) []string {
 	for i := len(a)/2 - 1; i >= 0; i-- {
 		opp := len(a) - 1 - i
 		a[i], a[opp] = a[opp], a[i]
