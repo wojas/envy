@@ -14,6 +14,7 @@ var AllCheckers = []Checker{
 	BinCheck{".venv/bin"},
 	DotEnvCheck{".envy"},
 	GoPathCheck{},
+	GitRootCheck{},
 }
 
 // Checker is the interface shared by functions that check for Actions to take
