@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime/trace"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/wojas/envy/action"
@@ -206,6 +207,10 @@ func main() {
 	for _, item := range env.Changes() {
 		if os.Getenv(item.Key) != item.Val {
 			sh.SetEnv(item.Key, item.Val)
+			if strings.HasPrefix(item.Key, "_ENVY_") {
+				continue // Do not log gitroot env changes
+			}
+
 			if item.Restored {
 				log.Printf("restore: %s = %s", item.Key, shorten.Do(item.Val))
 			} else {
