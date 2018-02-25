@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"runtime/trace"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/wojas/envy/action"
@@ -19,6 +18,7 @@ import (
 )
 
 var traceFile = flag.String("trace", "", "Write trace to given file for use with `go tool trace`")
+var fish = flag.Bool("fish", false, "Output fish shell commands instead of the default bash/zsh commands.")
 
 const (
 	// TODO: use https://github.com/fatih/color
@@ -194,10 +194,18 @@ func main() {
 		}
 	}
 
-	// Print commands to perform environment changes
+	// Print commands to perform environment changes for different shells
+	var sh shell.Shell
+	if *fish {
+		sh = shell.Fish()
+	} else {
+		sh = shell.Bash() // Also used for zsh
+	}
+
+	// Environment changes
 	for _, item := range env.Changes() {
 		if os.Getenv(item.Key) != item.Val {
-			shell.SetEnv(item.Key, item.Val)
+			sh.SetEnv(item.Key, item.Val)
 			if item.Restored {
 				log.Printf("restore: %s = %s", item.Key, shorten.Do(item.Val))
 			} else {
@@ -205,9 +213,10 @@ func main() {
 			}
 		}
 	}
+
+	// PATH changes
 	if path.Changed {
-		pathenv := strings.Join(path.Get(), string(filepath.ListSeparator))
-		shell.SetEnv("PATH", pathenv)
+		sh.SetPath(path)
 
 		// Print removed paths
 		var removed []string
@@ -232,5 +241,5 @@ func main() {
 	// Set new session.
 	// This one is exported too, so that if the user start a subshell,
 	// envy is aware of the changes in the parent shell.
-	shell.SetEnv("_envy_session", session.Dump(ses))
+	sh.SetEnv("_envy_session", session.Dump(ses))
 }
