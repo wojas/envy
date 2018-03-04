@@ -1,0 +1,83 @@
+# .goreleaser.yml - see https://goreleaser.com/
+
+# Build customization
+builds:
+  - binary: envy
+    goos:
+      - darwin
+      - linux
+      - freebsd
+      - openbsd
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+    goarm:
+      - 6
+
+    ignore:
+      - goos: freebsd
+        goarch: arm
+      - goos: freebsd
+        goarch: arm64
+      - goos: openbsd
+        goarch: arm
+      - goos: openbsd
+        goarch: arm64
+
+    # This is needed to make reproducable builds easier
+    # https://forum.restic.net/t/reproducible-build-is-it-working/490/11
+    # FIXME: cannot access environment variables here
+    #flags: -gcflags=all=-trimpath=$GOPATH -asmflags=all=-trimpath=$GOPATH
+
+release:
+    github:
+        owner: wojas
+        name: envy
+    draft: true
+    #prerelease: true
+
+git:
+  short_hash: true
+
+snapshot:
+    name_template: "SNAPSHOT-{{.Commit}}"
+
+archive:
+    name_template: "{{ .ProjectName }}-{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: true
+    format: tar.gz
+    files:
+        - README.md
+        - LICENSE
+
+nfpm:
+    # TODO: maybe upload to https://gemfury.com/help/public-packages/
+    name_template: "{{ .ProjectName }}-{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    vendor: Konrad Wojas
+    homepage: https://github.com/wojas/envy
+    maintainer: Konrad Wojas <envy@m.wojas.nl>
+    description: Shell utility to automatically manage your env vars
+    license: MIT
+    formats:
+        - deb
+        # TODO: build fails locally
+        #- rpm 
+    bindir: /usr/bin
+    # TODO: license, readme
+    files:
+        "README.md": "/usr/share/doc/envy/README.md"
+
+brew:
+    github:
+        owner: wojas
+        name: homebrew-tap
+    #download_strategy: GitHubPrivateRepositoryReleaseDownloadStrategy
+    commit_author:
+        name: goreleaserbot
+        email: goreleaser@m.wojas.nl
+    homepage: https://github.com/wojas/envy
+    description: Shell utility to automatically manage your env vars
+    skip_upload: true
+
