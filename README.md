@@ -50,7 +50,7 @@ function precmd { eval $(envy session); }
 or `~/.bashrc`:
 ```bash
 function envyprecmd { eval $(envy session); }
-PROMPT_COMMAND="envyprecmd; $PROMPT_COMMAND"
+PROMPT_COMMAND="envyprecmd"
 ```
 
 [Fish] users can create a `~/.config/fish/conf.d/envy.fish` file with the following contents:
