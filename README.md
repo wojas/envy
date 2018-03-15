@@ -41,10 +41,16 @@ To install from source, you need to have [Go] 1.10 installed and `GOPATH` set. T
 
 ## Configuring your shell
 
-In order to use envy, simply add the following to your `~/.bashrc` or `~/.zshrc`:
+In order to use envy, simply add the following to your `~/.zshrc`:
 
 ```bash
-function precmd { eval $(envy session) }
+function precmd { eval $(envy session); }
+```
+
+or `~/.bashrc`:
+```bash
+function envyprecmd { eval $(envy session); }
+PROMPT_COMMAND="envyprecmd"
 ```
 
 [Fish] users can create a `~/.config/fish/conf.d/envy.fish` file with the following contents:
