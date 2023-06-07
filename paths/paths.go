@@ -19,17 +19,21 @@ func IsSubpath(p, parent string) bool {
 	return true
 }
 
-// ToCheck returns all paths to check using the checkers.
-// Currently only paths under the home directory are returned for security,
-// but this will become configurable in a future version.
-func ToCheck(cwd, home string) (paths []string) {
-	// First check if we are within the user's home dir
-	if !IsSubpath(cwd, home) {
-		return nil
+// IsSubpathOfAny checks if path `p` is a subpath of any given parent
+func IsSubpathOfAny(p string, parents []string) bool {
+	for _, candidate := range parents {
+		if IsSubpath(p, candidate) {
+			return true
+		}
 	}
+	return false
+}
 
+// ToCheck returns all paths to check using the checkers.
+// It only includes trusted paths.
+func ToCheck(cwd string, trusted []string) (paths []string) {
 	p := cwd
-	for strings.HasPrefix(p, home) {
+	for IsSubpathOfAny(p, trusted) {
 		paths = append(paths, p)
 		p = filepath.Dir(p)
 	}

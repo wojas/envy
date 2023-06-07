@@ -86,6 +86,14 @@ func handleEnvyVar(actions action.List, path, k, v string) action.List {
 			Priority: -1,
 			AddPath:  filepath.Join(v, "bin"),
 		})
+	case "ENVY_COLOR":
+		// Handled in main
+		actions = append(actions, action.Action{
+			Path:        path,
+			Priority:    -1,
+			SetEnv:      k,
+			SetEnvValue: v,
+		})
 	default:
 		log.Printf("%s not supported in env files", k)
 	}

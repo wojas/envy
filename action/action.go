@@ -7,6 +7,7 @@ type Action struct {
 	AddPath     string
 	SetEnv      string
 	SetEnvValue string
+	SetColor    string
 }
 
 // List is a slice of Action structs with a sort.Interface predefined.

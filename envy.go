@@ -12,6 +12,7 @@ import (
 
 	"github.com/wojas/envy/action"
 	"github.com/wojas/envy/checkers"
+	"github.com/wojas/envy/config"
 	environ "github.com/wojas/envy/env"
 	"github.com/wojas/envy/paths"
 	"github.com/wojas/envy/session"
@@ -20,6 +21,8 @@ import (
 
 var traceFile = flag.String("trace", "", "Write trace to given file for use with `go tool trace`")
 var fish = flag.Bool("fish", false, "Output fish shell commands instead of the default bash/zsh commands.")
+
+const ConfigFile = ".envy.yml"
 
 const (
 	// TODO: use https://github.com/fatih/color
@@ -79,11 +82,24 @@ func main() {
 	// Options set through environment variables
 	debug := os.Getenv("envy_debug") != ""
 
-	// Get information about our environment
+	// Get configuration
 	home, err := paths.HomeDir()
 	if err != nil {
 		log.Fatalf("Could not determine home dir: %v", nil)
 	}
+	conf := config.Default()
+	err = conf.LoadYAMLFile(filepath.Join(home, ConfigFile))
+	if err != nil && !os.IsNotExist(err) {
+		log.Printf("Could not open ~/%s config file: %v", ConfigFile, err)
+	}
+	if err := conf.Check(); err != nil {
+		log.Fatalf("Error in ~/%s config: %v", ConfigFile, err)
+	}
+	if debug {
+		log.Printf("Effective config:\n%s", conf)
+	}
+
+	// Get information about our environment
 	cwd, err := os.Getwd()
 	if err != nil {
 		return
@@ -115,7 +131,17 @@ func main() {
 	}
 
 	// Step 2: Perform actions for the current working directory.
-	actions := getActions(paths.ToCheck(cwd, home))
+	toCheck := paths.ToCheck(cwd, conf.TrustedPaths)
+	if conf.AlwaysLoadHome {
+		// TODO: handle home with trailing /
+		if len(toCheck) == 0 || toCheck[len(toCheck)-1] != home {
+			toCheck = append(toCheck, home)
+		}
+	}
+	if debug {
+		log.Printf("Paths to check: %v", toCheck)
+	}
+	actions := getActions(toCheck)
 	seenEnvs := make(map[string]bool)
 	seenPaths := make(map[string]bool)
 	for _, a := range actions {
@@ -215,6 +241,22 @@ func main() {
 				log.Printf("restore: %s = %s", item.Key, shorten.Do(item.Val))
 			} else {
 				log.Printf("%s = %s", item.Key, shorten.Do(item.Val))
+			}
+
+			// Easiest to implement when this changes
+			if item.Key == "ENVY_COLOR" {
+				color := item.Val
+				if color == "" {
+					color = "RESET"
+				}
+				s, exists := conf.Colors[color]
+				if !exists {
+					log.Printf("WARNING: Color %q not defined in ~/.envy.yml", color)
+				}
+				if debug {
+					log.Printf("Color: %s = %q", color, s)
+				}
+				_, _ = os.Stderr.WriteString(s) // no newline
 			}
 		}
 	}
